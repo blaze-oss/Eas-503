@@ -1,31 +1,39 @@
-# -------- STREAMLIT SECRETS --------
-.streamlit/secrets.toml
-
-# -------- PYTHON --------
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pkl
 
-# -------- ENVIRONMENTS --------
-.env
-.venv
 venv/
-ENV/
 env/
+.venv/
 
-# -------- JUPYTER --------
 .ipynb_checkpoints/
 
-# -------- MACOS --------
-.DS_Store
+*.env
+.env
 
-# -------- LOGS --------
-*.log
+.streamlit/secrets.toml
+.streamlit/*.log
 
-# -------- LARGE FILES --------
+*.db
+*.sqlite
+*.sql
 orders_flat.csv
 
-# -------- RENDER OR TEMP FILES --------
-*.db
-normalized.db
+*.zip
+*.tar.gz
+*.7z
+
+.vscode/
+*.code-workspace
+
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+
+*.log
+
+node_modules/

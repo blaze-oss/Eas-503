@@ -4,14 +4,10 @@ import pandas as pd
 from streamlit import secrets
 import google.generativeai as genai
 
-# ---------------------------------------------------------
-# PAGE CONFIG
-# ---------------------------------------------------------
+
 st.set_page_config(page_title="EAS503 Gemini SQL Assistant", layout="wide")
 
-# ---------------------------------------------------------
-# PASSWORD PROTECTION
-# ---------------------------------------------------------
+
 PASSWORD = secrets["APP_PASSWORD"]
 
 entered_pw = st.text_input("🔑 Enter password:", type="password")
@@ -25,9 +21,7 @@ if entered_pw != PASSWORD:
 st.success("✔ Password accepted! Loading dashboard...")
 
 
-# ---------------------------------------------------------
-# CONNECT TO POSTGRES
-# ---------------------------------------------------------
+
 @st.cache_resource
 def connect_db():
     return psycopg2.connect(
@@ -49,9 +43,7 @@ def run_query(sql):
         return None
 
 
-# ---------------------------------------------------------
-# CONFIGURE GEMINI
-# ---------------------------------------------------------
+
 genai.configure(api_key=secrets["GEMINI_API_KEY"])
 model = genai.GenerativeModel("gemini-2.5-flash")
 
@@ -93,9 +85,7 @@ def nl_to_sql(prompt):
     
     sql = response.text.strip()
 
-    # -----------------------------
-    # SANITIZE SQL
-    # -----------------------------
+
     sql = sql.replace("```sql", "")
     sql = sql.replace("```", "")
     sql = sql.replace("`", "")
@@ -118,9 +108,7 @@ def nl_to_sql(prompt):
     return sql
 
 
-# ---------------------------------------------------------
-# MAIN UI
-# ---------------------------------------------------------
+
 st.title("🤖 Gemini-Powered SQL Assistant (EAS503)")
 st.write("Ask anything in English — Gemini converts it into SQL and runs it on the PostgreSQL database.")
 
