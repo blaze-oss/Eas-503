@@ -1,0 +1,31 @@
+# -------- STREAMLIT SECRETS --------
+.streamlit/secrets.toml
+
+# -------- PYTHON --------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# -------- ENVIRONMENTS --------
+.env
+.venv
+venv/
+ENV/
+env/
+
+# -------- JUPYTER --------
+.ipynb_checkpoints/
+
+# -------- MACOS --------
+.DS_Store
+
+# -------- LOGS --------
+*.log
+
+# -------- LARGE FILES --------
+orders_flat.csv
+
+# -------- RENDER OR TEMP FILES --------
+*.db
+normalized.db

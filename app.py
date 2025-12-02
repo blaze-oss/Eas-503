@@ -1,139 +1,160 @@
 import streamlit as st
 import psycopg2
 import pandas as pd
+from streamlit import secrets
+import google.generativeai as genai
 
-# ---------------------------------
-# 1) STREAMLIT PAGE & PASSWORD
-# ---------------------------------
-st.set_page_config(page_title="EAS503 Orders Dashboard", layout="wide")
+# ---------------------------------------------------------
+# PAGE CONFIG
+# ---------------------------------------------------------
+st.set_page_config(page_title="EAS503 Gemini SQL Assistant", layout="wide")
 
-PASSWORD = "eas503"
+# ---------------------------------------------------------
+# PASSWORD PROTECTION
+# ---------------------------------------------------------
+PASSWORD = secrets["APP_PASSWORD"]
 
-entered = st.text_input("🔑 Enter password to access dashboard:", type="password")
-if entered != PASSWORD:
+entered_pw = st.text_input("🔑 Enter password:", type="password")
+
+if entered_pw and entered_pw != PASSWORD:
+    st.error("❌ Wrong password. Try again.")
+
+if entered_pw != PASSWORD:
     st.stop()
 
-st.success("Password accepted! Loading dashboard...")
+st.success("✔ Password accepted! Loading dashboard...")
 
 
-# ---------------------------------
-# 2) DATABASE CONNECTION
-# ---------------------------------
-DB_HOST = "dpg-d4lpeoeuk2gs738hpbhg-a.ohio-postgres.render.com"
-DB_NAME = "eas503db"
-DB_USER = "eas503db_user"
-DB_PASSWORD = "GBurbd5Gy2CBIbbdFOWPbZe0rhLFRAgF"
-DB_PORT = 5432
-
+# ---------------------------------------------------------
+# CONNECT TO POSTGRES
+# ---------------------------------------------------------
 @st.cache_resource
 def connect_db():
     return psycopg2.connect(
-        host=DB_HOST,
-        dbname=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        port=DB_PORT
+        host=secrets["DB_HOST"],
+        dbname=secrets["DB_NAME"],
+        user=secrets["DB_USER"],
+        password=secrets["DB_PASSWORD"],
+        port=secrets["DB_PORT"]
     )
 
 conn = connect_db()
 
-def run_query(query):
-    return pd.read_sql(query, conn)
 
-
-# ---------------------------------
-# 3) PAGE TITLE
-# ---------------------------------
-st.title("🛒 EAS503 Orders Analytics Dashboard")
-st.write("Streamlit app connected to Render PostgreSQL")
-
-
-# ---------------------------------
-# 4) TWO COLUMN LAYOUT (required)
-# ---------------------------------
-left_col, right_col = st.columns(2)
-
-# ----- LEFT COLUMN → Row Count -----
-with left_col:
-    st.subheader("📊 Database Overview")
-    total_rows = run_query("SELECT COUNT(*) FROM orders;")
-    st.metric(label="Total Rows in Orders Table", value=int(total_rows.iloc[0,0]))
-
-# ----- RIGHT COLUMN → Sample Data -----
-with right_col:
-    st.subheader("🔍 Sample Rows")
-    df_sample = run_query("SELECT * FROM orders LIMIT 10;")
-    st.dataframe(df_sample)
-
-
-# ---------------------------------
-# 5) REGION CHART
-# ---------------------------------
-st.header("🌎 Total Orders by Region")
-
-query_region = """
-SELECT region, SUM(quantity_ordered) AS total
-FROM orders
-GROUP BY region
-ORDER BY total DESC;
-"""
-
-df_region = run_query(query_region)
-st.bar_chart(df_region.set_index("region"))
-
-
-# ---------------------------------
-# 6) COUNTRY CHART
-# ---------------------------------
-st.header("🗺️ Total Orders by Country")
-
-query_country = """
-SELECT country, SUM(quantity_ordered) AS total
-FROM orders
-GROUP BY country
-ORDER BY total DESC;
-"""
-
-df_country = run_query(query_country)
-st.bar_chart(df_country.set_index("country"))
-
-
-# ---------------------------------
-# 7) PRODUCT CATEGORY CHART
-# ---------------------------------
-st.header("📦 Total Orders by Product Category")
-
-query_category = """
-SELECT product_category, SUM(quantity_ordered) AS total
-FROM orders
-GROUP BY product_category
-ORDER BY total DESC;
-"""
-# ---------------------------------
-# 8) ChatGPT / SQL Query Runner
-# ---------------------------------
-st.header("💬 ChatGPT SQL Query Runner")
-
-st.write("Type any SQL SELECT query and see the results below.")
-
-user_query = st.text_area("Enter a SQL query:", placeholder="SELECT * FROM orders LIMIT 10;")
-
-if st.button("Run Query"):
+def run_query(sql):
     try:
-        df_q = run_query(user_query)
-        st.dataframe(df_q)
+        return pd.read_sql(sql, conn)
     except Exception as e:
-        st.error(f"Error running query: {e}")
-
-df_category = run_query(query_category)
-st.bar_chart(df_category.set_index("product_category"))
+        st.error(f"SQL Error: {e}")
+        return None
 
 
-# ---------------------------------
-# 8) SHOW FULL DATA (optional)
-# ---------------------------------
-st.header("📚 Full Dataset (Optional)")
-if st.checkbox("Show full orders table"):
-    df_full = run_query("SELECT * FROM orders;")
-    st.dataframe(df_full)
+# ---------------------------------------------------------
+# CONFIGURE GEMINI
+# ---------------------------------------------------------
+genai.configure(api_key=secrets["GEMINI_API_KEY"])
+model = genai.GenerativeModel("gemini-2.5-flash")
+
+SYSTEM_PROMPT = """
+You are an expert SQL generator for PostgreSQL.
+Generate ONLY a valid SQL SELECT query.
+
+IMPORTANT SCHEMA RULES:
+The table `orders` has ONLY these columns:
+
+customer_name,
+address,
+city,
+country,
+region,
+product_name,
+product_category,
+product_category_description,
+product_unit_price,
+quantity_ordered,
+order_date (DATE)
+
+STRICT RULES:
+- The table DOES NOT have: id, order_id, customer_id, product_id OR ANY numeric ID column.
+- NEVER use id in ANY query.
+- ALWAYS use COUNT(*) instead of COUNT(id).
+- Validate column names EXACTLY.
+- ALWAYS return a plain SQL SELECT statement.
+- NEVER wrap inside ``` ``` blocks.
+- NEVER include extra text, only SQL.
+"""
+
+
+def nl_to_sql(prompt):
+    """Convert English → SQL using Gemini safely."""
+    response = model.generate_content(
+        SYSTEM_PROMPT + "\nUser Prompt: " + prompt
+    )
+    
+    sql = response.text.strip()
+
+    # -----------------------------
+    # SANITIZE SQL
+    # -----------------------------
+    sql = sql.replace("```sql", "")
+    sql = sql.replace("```", "")
+    sql = sql.replace("`", "")
+    sql = sql.strip()
+
+    # Remove accidental "sql " prefix
+    if sql.lower().startswith("sql "):
+        sql = sql[4:].strip()
+
+    if sql.lower().startswith("sql\n"):
+        sql = sql[4:].strip()
+
+    # Remove semicolon
+    sql = sql.rstrip(";").strip()
+
+    # 🛑 SAFETY PATCH: Fix hallucinated id column
+    sql = sql.replace("COUNT(id)", "COUNT(*)")
+    sql = sql.replace("count(id)", "COUNT(*)")
+
+    return sql
+
+
+# ---------------------------------------------------------
+# MAIN UI
+# ---------------------------------------------------------
+st.title("🤖 Gemini-Powered SQL Assistant (EAS503)")
+st.write("Ask anything in English — Gemini converts it into SQL and runs it on the PostgreSQL database.")
+
+prompt = st.text_area("💬 Ask a question (e.g., 'show sales by region'): ")
+
+if st.button("Generate SQL & Run"):
+
+    if not prompt.strip():
+        st.warning("Please type a question.")
+        st.stop()
+
+    # Generate SQL
+    with st.spinner("🤖 Generating SQL using Gemini..."):
+        sql_query = nl_to_sql(prompt)
+
+    st.subheader("🧠 Generated SQL")
+    st.code(sql_query, language="sql")
+
+    # Run SQL
+    with st.spinner("📡 Running query on PostgreSQL..."):
+        df = run_query(sql_query)
+
+    if df is not None:
+        st.success("✔ Query executed successfully!")
+        st.dataframe(df)
+
+        # Auto chart
+        numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns
+        text_cols = df.select_dtypes(include=["object"]).columns
+
+        if len(numeric_cols) > 0 and len(text_cols) > 0:
+            try:
+                st.subheader("📊 Auto Chart")
+                st.bar_chart(df.set_index(text_cols[0])[numeric_cols[0]])
+            except:
+                st.info("Chart not available for this query.")
 

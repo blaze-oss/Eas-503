@@ -9,7 +9,6 @@ DB_PORT = 5432
 
 
 def make_orders_dataframe(csv_path: str) -> pd.DataFrame:
-    # Your data.csv is TAB separated
     raw = pd.read_csv(csv_path, sep="\t")
 
     rows = []
